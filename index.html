@@ -1,114 +1,158 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simulateur de cohérence temporelle</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f5f5f5;
-      text-align: center;
-      padding: 20px;
-    }
-    h1 {
-      color: #333;
-    }
-    .chart-container {
-      width: 90%;
-      max-width: 700px;
-      margin: 30px auto;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    input[type="range"] {
-      width: 80%;
-      margin: 15px 0;
-    }
-  </style>
-</head>
-<body>
-  <h1>Simulateur de cohérence temporelle</h1>
+<div id="sim-coherence" style="font-family: system-ui; padding:10px; max-width:100%;">
+  <h3>🎛️ Simulateur : cohérence temporelle et interférences</h3>
 
-  <div class="chart-container">
-    <canvas id="waveChart"></canvas>
-    <canvas id="sumChart" style="margin-top:40px;"></canvas>
+  <!-- Canvas pour onde 1, onde 2, et somme -->
+  <canvas id="canvas1" height="160"></canvas>
+  <canvas id="canvas2" height="160"></canvas>
+  <canvas id="canvasSum" height="160"></canvas>
 
-    <label for="phaseShift">Déphasage initial (en degrés) :</label><br>
-    <input type="range" id="phaseShift" min="0" max="360" value="0" step="1">
+  <!-- Contrôles -->
+  <div style="margin-top:10px;">
+    <button id="playBtn">▶ Play</button>
+    <button id="resetBtn">↺ Reset</button>
+    <label style="margin-left:10px;"><input id="showEnvelope" type="checkbox"> Afficher l’enveloppe d’intensité</label>
   </div>
 
-  <script src="chart.js">
-    const ctx1 = document.getElementById('waveChart').getContext('2d');
-    const ctx2 = document.getElementById('sumChart').getContext('2d');
-    const slider = document.getElementById('phaseShift');
+  <div style="margin-top:10px;">
+    <label>Vitesse globale : <input id="speed" type="range" min="0.1" max="4" step="0.1" value="1"></label>
+    <label>Fréq. onde 1 (Hz) : <input id="f1" type="range" min="0.5" max="20" step="0.1" value="5"></label>
+    <label>Fréq. onde 2 (Hz) : <input id="f2" type="range" min="0.5" max="20" step="0.1" value="5"></label>
+    <label>Amplitude 1 : <input id="a1" type="range" min="0" max="2" step="0.01" value="1"></label>
+    <label>Amplitude 2 : <input id="a2" type="range" min="0" max="2" step="0.01" value="1"></label>
+    <label>Évolution phase : 
+      <select id="phaseMode">
+        <option value="reset">Reset aléatoire</option>
+        <option value="linear">Dérive linéaire</option>
+        <option value="noise">Bruit continu</option>
+      </select>
+    </label>
+    <label>Temps cohérence / reset (s) : <input id="tau" type="range" min="0.1" max="10" step="0.1" value="1"></label>
+    <label>Vitesse dérive / bruit : <input id="drift" type="range" min="-10" max="10" step="0.1" value="0"></label>
+  </div>
+</div>
 
-    const N = 200;
-    const x = Array.from({length: N}, (_, i) => i / 20);
-    const amplitude = 1;
+<style>
+  /* Forcer les canvas à occuper toute la largeur et rester empilés */
+  #sim-coherence canvas {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 160px;
+    display: block;
+    margin-bottom: 10px;
+  }
 
-    function degToRad(deg) {
-      return deg * Math.PI / 180;
+  /* Labels et inputs */
+  #sim-coherence label {
+    display: block;
+    margin-top:5px;
+    font-size:12px;
+  }
+
+  #sim-coherence input[type=range] {
+    width: 100%;
+  }
+</style>
+
+<script src="chart.js">
+(() => {
+  const c1 = document.getElementById('canvas1'),
+        c2 = document.getElementById('canvas2'),
+        cs = document.getElementById('canvasSum');
+  const ctx1 = c1.getContext('2d'),
+        ctx2 = c2.getContext('2d'),
+        ctxs = cs.getContext('2d');
+
+  const playBtn = document.getElementById('playBtn'),
+        resetBtn = document.getElementById('resetBtn'),
+        showEnv = document.getElementById('showEnvelope');
+  const speed = document.getElementById('speed');
+  const f1s = document.getElementById('f1');
+  const f2s = document.getElementById('f2');
+  const a1s = document.getElementById('a1');
+  const a2s = document.getElementById('a2');
+  const phaseMode = document.getElementById('phaseMode');
+  const tau = document.getElementById('tau');
+  const drift = document.getElementById('drift');
+
+  let running = false, lastTS = null, t = 0;
+  let phi1 = Math.random()*Math.PI*2, phi2 = Math.random()*Math.PI*2;
+  let lastReset = 0;
+
+  function drawWave(ctx, width, height, dataFunc, color='#a42', scale=1, dashed=false) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    if(dashed) ctx.setLineDash([6,4]); else ctx.setLineDash([]);
+    ctx.beginPath();
+    const samples = width;
+    for (let x=0;x<samples;x++){
+      const s = dataFunc(x/samples);
+      const y = height/2 - s*(height*0.38/scale);
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  function clearCanvas(ctx, width, height){
+    ctx.clearRect(0,0,width,height);
+    ctx.strokeStyle = 'rgba(50,60,80,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0,height/2);
+    ctx.lineTo(width,height/2);
+    ctx.stroke();
+  }
+
+  function step(timestamp){
+    if(!running){ lastTS=null; return; }
+    if(lastTS===null) lastTS=timestamp;
+    const dt = (timestamp - lastTS)/1000 * parseFloat(speed.value);
+    lastTS = timestamp;
+    t += dt;
+
+    const f1 = parseFloat(f1s.value), f2 = parseFloat(f2s.value);
+    const a1 = parseFloat(a1s.value), a2 = parseFloat(a2s.value);
+    const mode = phaseMode.value;
+    const tauVal = parseFloat(tau.value);
+    const driftRate = parseFloat(drift.value);
+
+    if(mode==='reset'){ if(t-lastReset>=tauVal){ phi1=Math.random()*Math.PI*2; phi2=Math.random()*Math.PI*2; lastReset=t; } }
+    else if(mode==='linear'){ phi1+=driftRate*dt; phi2+=(-driftRate*0.4)*dt; }
+    else if(mode==='noise'){ const sigma=Math.abs(driftRate); phi1+=sigma*(Math.random()-0.5)*0.5; phi2+=sigma*(Math.random()-0.5)*0.5; }
+
+    const width = c1.clientWidth*devicePixelRatio;
+    const height = 160*devicePixelRatio;
+    c1.width=c2.width=cs.width=width;
+    c1.height=c2.height=cs.height=height;
+
+    const wFunc1 = (u)=>a1*Math.sin(2*Math.PI*f1*(u+t)+phi1);
+    const wFunc2 = (u)=>a2*Math.sin(2*Math.PI*f2*(u+t)+phi2);
+
+    clearCanvas(ctx1,width,height); drawWave(ctx1,width,height,wFunc1,'#134');
+    clearCanvas(ctx2,width,height); drawWave(ctx2,width,height,wFunc2,'#134');
+
+    const Amax = a1 + a2;
+    clearCanvas(ctxs,width,height);
+    drawWave(ctxs,width,height,(u)=>wFunc1(u)+wFunc2(u),'#a42',Amax);
+
+    if(showEnv.checked){
+      const Δφ = phi2-phi1;
+      const Imax = (a1*a1 + a2*a2 + 2*a1*a2*Math.cos(Δφ));
+      const I = Math.sqrt(Imax)/Amax;
+      drawWave(ctxs,width,height,()=>I,'black',1,true);
+      drawWave(ctxs,width,height,()=>-I,'black',1,true);
     }
 
-    function generateData(phaseDeg) {
-      const phaseRad = degToRad(phaseDeg);
-      const wave1 = x.map(t => amplitude * Math.sin(2 * Math.PI * 0.5 * t));
-      const wave2 = x.map(t => amplitude * Math.sin(2 * Math.PI * 0.5 * t + phaseRad));
-      const sum = wave1.map((y, i) => y + wave2[i]);
-      return {wave1, wave2, sum};
-    }
+    requestAnimationFrame(step);
+  }
 
-    function updateCharts(phaseDeg) {
-      const {wave1, wave2, sum} = generateData(phaseDeg);
+  playBtn.addEventListener('click',()=>{ running=!running; playBtn.textContent=running?'⏸ Pause':'▶ Play'; if(running) requestAnimationFrame(step); });
+  resetBtn.addEventListener('click',()=>{
+    t=0; phi1=Math.random()*Math.PI*2; phi2=Math.random()*Math.PI*2; lastReset=0;
+    const a1 = parseFloat(a1s.value), a2=parseFloat(a2s.value);
+    [ctx1,ctx2,ctxs].forEach((ctx)=>clearCanvas(ctx,ctx.canvas.width,ctx.canvas.height));
+    drawWave(ctxs,cs.width,cs.height,()=>0,'#a42',a1+a2);
+  });
 
-      waveChart.data.datasets[0].data = wave1;
-      waveChart.data.datasets[1].data = wave2;
-      sumChart.data.datasets[0].data = sum;
-
-      waveChart.update();
-      sumChart.update();
-    }
-
-    const waveChart = new Chart(ctx1, {
-      type: 'line',
-      data: {
-        labels: x,
-        datasets: [
-          { label: 'Onde 1', data: [], borderColor: 'red', borderWidth: 2, fill: false },
-          { label: 'Onde 2', data: [], borderColor: 'blue', borderWidth: 2, fill: false }
-        ]
-      },
-      options: {
-        animation: false,
-        scales: {
-          y: { min: -1.2, max: 1.2 }
-        }
-      }
-    });
-
-    const sumChart = new Chart(ctx2, {
-      type: 'line',
-      data: {
-        labels: x,
-        datasets: [
-          { label: 'Somme des deux ondes', data: [], borderColor: 'purple', borderWidth: 2, fill: false }
-        ]
-      },
-      options: {
-        animation: false,
-        scales: {
-          y: { min: -2.4, max: 2.4 }
-        }
-      }
-    });
-
-    // Initialisation
-    updateCharts(0);
-    slider.addEventListener('input', e => updateCharts(Number(e.target.value)));
-  </script>
-</body>
-</html>
+  resetBtn.click();
+})();
+</script>

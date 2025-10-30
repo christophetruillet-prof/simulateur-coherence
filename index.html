@@ -1,116 +1,95 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simulateur de cohérence temporelle</title>
-  <script src="chart.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f5f5f5;
-      text-align: center;
-      padding: 20px;
-    }
-    h1 {
-      color: #333;
-    }
-    .chart-container {
-      width: 90%;
-      max-width: 700px;
-      margin: 30px auto;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    input[type="range"] {
-      width: 80%;
-      margin: 15px 0;
-    }
-  </style>
+<meta charset="utf-8" />
+<title>Simulateur : cohérence temporelle et interférences</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:20px; background:#f7f8fb; color:#222; }
+  h1 { font-size:20px; margin:0 0 8px 0; text-align:center; }
+  .panel { background:white; border-radius:8px; padding:12px; box-shadow: 0 2px 6px rgba(20,20,40,0.06); max-width:800px; margin:auto; }
+  canvas { width:100%; height:160px; display:block; background:linear-gradient(#fff,#f6f9ff); border-radius:6px; margin-top:10px; }
+  .footer { font-size:13px; text-align:center; color:#555; margin-top:10px; }
+</style>
 </head>
 <body>
-  <h1>Simulateur de cohérence temporelle</h1>
-
-  <div class="chart-container">
-    <canvas id="waveChart"></canvas>
-    <canvas id="sumChart" style="margin-top:40px;"></canvas>
-
-    <label for="phaseShift">Déphasage initial (en degrés) :</label><br>
-    <input type="range" id="phaseShift" min="0" max="360" value="0" step="1">
+  <h1>Simulateur : cohérence temporelle (onde 1, onde 2, somme)</h1>
+  <div class="panel">
+    <canvas id="canvas1" height="160"></canvas>
+    <canvas id="canvas2" height="160"></canvas>
+    <canvas id="canvasSum" height="160"></canvas>
+    <div class="footer">Les phases des ondes sont réinitialisées aléatoirement toutes les 0,2 s (perte de cohérence).</div>
   </div>
 
-  <script >
-    const ctx1 = document.getElementById('waveChart').getContext('2d');
-    const ctx2 = document.getElementById('sumChart').getContext('2d');
-    const slider = document.getElementById('phaseShift');
+<script src="chart.js">
+(() => {
+  const c1 = document.getElementById('canvas1'),
+        c2 = document.getElementById('canvas2'),
+        cs = document.getElementById('canvasSum');
+  const ctx1 = c1.getContext('2d'),
+        ctx2 = c2.getContext('2d'),
+        ctxs = cs.getContext('2d');
 
-    const N = 200;
-    const x = Array.from({length: N}, (_, i) => i / 20);
-    const amplitude = 1;
+  // paramètres fixes
+  const speed = 0.2;
+  const f1 = 10, f2 = 10;
+  const a1 = 1, a2 = 1;
+  const tau = 0.2; // temps de cohérence
+  let t = 0;
+  let phi1 = Math.random()*Math.PI*2, phi2 = Math.random()*Math.PI*2;
+  let lastReset = 0;
+  let lastTS = null;
 
-    function degToRad(deg) {
-      return deg * Math.PI / 180;
+  function drawWave(ctx, width, height, dataFunc, color='#134', scale=1) {
+    ctx.clearRect(0,0,width,height);
+    ctx.strokeStyle = 'rgba(50,60,80,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0,height/2);
+    ctx.lineTo(width,height/2);
+    ctx.stroke();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    const samples = width;
+    for (let x=0;x<samples;x++){
+      const s = dataFunc(x/samples);
+      const y = height/2 - s*(height*0.38/scale);
+      if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  function step(timestamp){
+    if (lastTS===null) lastTS = timestamp;
+    const dt_ms = timestamp - lastTS; lastTS = timestamp;
+    const dt = dt_ms/1000 * speed;
+    t += dt;
+
+    // reset aléatoire des phases
+    if (t - lastReset >= tau) {
+      phi1 = Math.random()*Math.PI*2;
+      phi2 = Math.random()*Math.PI*2;
+      lastReset = t;
     }
 
-    function generateData(phaseDeg) {
-      const phaseRad = degToRad(phaseDeg);
-      const wave1 = x.map(t => amplitude * Math.sin(2 * Math.PI * 0.5 * t));
-      const wave2 = x.map(t => amplitude * Math.sin(2 * Math.PI * 0.5 * t + phaseRad));
-      const sum = wave1.map((y, i) => y + wave2[i]);
-      return {wave1, wave2, sum};
-    }
+    const width = c1.width = c1.clientWidth*devicePixelRatio;
+    const height = c1.height = 160*devicePixelRatio;
+    c2.width = width; c2.height = height; cs.width = width; cs.height = height;
 
-    function updateCharts(phaseDeg) {
-      const {wave1, wave2, sum} = generateData(phaseDeg);
+    const wFunc1 = (u)=>a1*Math.sin(2*Math.PI*f1*(u+t)+phi1);
+    const wFunc2 = (u)=>a2*Math.sin(2*Math.PI*f2*(u+t)+phi2);
+    const sumFunc = (u)=>wFunc1(u)+wFunc2(u);
 
-      waveChart.data.datasets[0].data = wave1;
-      waveChart.data.datasets[1].data = wave2;
-      sumChart.data.datasets[0].data = sum;
+    drawWave(ctx1, width, height, wFunc1, '#1b5');
+    drawWave(ctx2, width, height, wFunc2, '#35a');
+    drawWave(ctxs, width, height, sumFunc, '#a42', a1+a2);
 
-      waveChart.update();
-      sumChart.update();
-    }
+    requestAnimationFrame(step);
+  }
 
-    const waveChart = new Chart(ctx1, {
-      type: 'line',
-      data: {
-        labels: x,
-        datasets: [
-          { label: 'Onde 1', data: [], borderColor: 'red', borderWidth: 2, fill: false },
-          { label: 'Onde 2', data: [], borderColor: 'blue', borderWidth: 2, fill: false }
-        ]
-      },
-      options: {
-        animation: false,
-        scales: {
-          y: { min: -1.2, max: 1.2 }
-        }
-      }
-    });
-
-    const sumChart = new Chart(ctx2, {
-      type: 'line',
-      data: {
-        labels: x,
-        datasets: [
-          { label: 'Somme des deux ondes', data: [], borderColor: 'purple', borderWidth: 2, fill: false }
-        ]
-      },
-      options: {
-        animation: false,
-        scales: {
-          y: { min: -2.4, max: 2.4 }
-        }
-      }
-    });
-
-    // Initialisation
-    updateCharts(0);
-    slider.addEventListener('input', e => updateCharts(Number(e.target.value)));
-  </script>
+  requestAnimationFrame(step);
+})();
+</script>
 </body>
 </html>
-
-

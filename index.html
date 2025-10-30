@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Simulateur : cohérence temporelle et interférences</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    margin: 20px;
+    background: #f7f8fb;
+    color: #222;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 16px 0;
+    text-align: center;
+  }
+  .layout {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 16px;
+    max-width: 1000px;
+    margin: auto;
+  }
+  .panel, .indicator {
+    background: white;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 2px 6px rgba(20, 20, 40, 0.06);
+  }
+  .panel {
+    flex: 2;
+  }
+  .indicator {
+    flex: 0.5;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-title, .indicator-title {
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 10px;
+    color: #333;
+  }
+  canvas {
+    width: 100%;
+    height: 160px;
+    display: block;
+    background: linear-gradient(#fff, #f6f9ff);
+    border-radius: 6px;
+    margin-top: 10px;
+  }
+  .indicator canvas {
+    flex: 1;
+    height: 160px;
+  }
+  .footer {
+    font-size: 13px;
+    text-align: center;
+    color: #555;
+    margin-top: 10px;
+  }
+
+  /* Notice box */
+  .notice {
+    max-width: 1000px;
+    margin: 18px auto 40px auto;
+    background: white;
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 2px 6px rgba(20,20,40,0.06);
+    color: #222;
+    line-height: 1.45;
+  }
+  .notice h2 {
+    font-size: 16px;
+    margin: 0 0 8px 0;
+  }
+  .notice ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+  }
+  .notice li {
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  /* Responsive: stack vertically on narrow screens */
+  @media (max-width: 880px) {
+    .layout { flex-direction: column; }
+    .indicator { order: 2; }
+    .panel { order: 1; }
+  }
+</style>
+</head>
+<body>
+  <h1>Simulateur : cohérence temporelle et interférences</h1>
+
+  <div class="layout">
+    <div class="panel">
+      <div class="panel-title">Évolution du champ électrique en fonction du temps en un point M donné</div>
+      <canvas id="canvas1" height="160"></canvas>
+      <canvas id="canvas2" height="160"></canvas>
+      <canvas id="canvasSum" height="160"></canvas>
+      <div class="footer">
+        Les phases des ondes sont réinitialisées aléatoirement (perte de cohérence).
+      </div>
+    </div>
+
+    <div class="indicator">
+      <div class="indicator-title">Intensité lumineuse résultante</div>
+      <canvas id="indic1" height="160"></canvas>
+      <canvas id="indic2" height="160"></canvas>
+      <canvas id="indic3" height="160"></canvas>
+    </div>
+  </div>
+
+  <div class="notice" role="region" aria-label="Notice explicative">
+    <h2>À observer</h2>
+    <ul>
+      <li>Les deux graphiques du haut montrent le <strong>champ électrique</strong> des deux ondes au point M.</li>
+      <li>La courbe <strong>Somme</strong> (en bas) est le champ résultant obtenu par superposition des deux ondes.</li>
+      <li>Le panneau de droite affiche l’<strong>intensité</strong> (énergie moyenne) : plus la case est rouge, plus l’intensité est élevée.</li>
+    </ul>
+  </div>
+
+<script src="chart.js">
+(() => {
+  const waves = [
+    { id: 'canvas1', label: 'Onde 1', color: '#1b5', indic: 'indic1' },
+    { id: 'canvas2', label: 'Onde 2', color: '#35a', indic: 'indic2' },
+    { id: 'canvasSum', label: 'Somme', color: '#a42', indic: 'indic3' }
+  ];
+
+  const speed = 0.2;
+  const f1 = 10, f2 = 10;
+  const a1 = 1, a2 = 1;
+  const tau = 0.2;
+  let t = 0;
+  let phi1 = Math.random() * Math.PI * 2, phi2 = Math.random() * Math.PI * 2;
+  let lastReset = 0;
+  let lastTS = null;
+
+  function drawWave(ctx, width, height, dataFunc, color, label, scale) {
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(50,60,80,0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    const samples = Math.max(2, Math.floor(width));
+    for (let x = 0; x < samples; x++) {
+      const s = dataFunc(x / samples);
+      const y = height / 2 - s * (height * 0.38 / scale);
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = '#000';
+    ctx.font = `${18 * devicePixelRatio}px system-ui`;
+    ctx.textAlign = 'left';
+    ctx.fillText(label, 10 * devicePixelRatio, 22 * devicePixelRatio);
+  }
+
+  function drawIndicator(ctx, width, height, energy) {
+    const r = Math.min(255, Math.floor(energy * 255));
+    ctx.fillStyle = `rgb(${r},0,0)`;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  function step(timestamp) {
+    if (lastTS === null) lastTS = timestamp;
+    const dt_ms = timestamp - lastTS;
+    lastTS = timestamp;
+    const dt = dt_ms / 1000 * speed;
+    t += dt;
+
+    if (t - lastReset >= tau) {
+      phi1 = Math.random() * Math.PI * 2;
+      phi2 = Math.random() * Math.PI * 2;
+      lastReset = t;
+    }
+
+    const commonScale = a1 + a2;
+
+    const w1 = (u) => a1 * Math.sin(2 * Math.PI * f1 * (u + t) + phi1);
+    const w2 = (u) => a2 * Math.sin(2 * Math.PI * f2 * (u + t) + phi2);
+    const ws = (u) => w1(u) + w2(u);
+
+    const E1 = 0.5 * a1 * a1;
+    const E2 = 0.5 * a2 * a2;
+    const Es = 0.5 * (a1 * a1 + a2 * a2 + 2 * a1 * a2 * Math.cos(phi1 - phi2));
+    const energies = [E1, E2, Es].map(e => Math.min(1, e / (commonScale * commonScale / 4)));
+
+    const funcs = [w1, w2, ws];
+    waves.forEach((w, i) => {
+      const canvas = document.getElementById(w.id);
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width = Math.max(2, Math.floor(canvas.clientWidth * devicePixelRatio));
+      const height = canvas.height = 160 * devicePixelRatio;
+      drawWave(ctx, width, height, funcs[i], w.color, w.label, commonScale);
+
+      const indic = document.getElementById(w.indic);
+      const ictx = indic.getContext('2d');
+      const iw = indic.width = Math.max(2, Math.floor(indic.clientWidth * devicePixelRatio));
+      const ih = indic.height = 160 * devicePixelRatio;
+      drawIndicator(ictx, iw, ih, energies[i]);
+    });
+
+    requestAnimationFrame(step);
+  }
+
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

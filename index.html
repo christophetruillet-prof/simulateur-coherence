@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Simulateur de cohérence temporelle</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="chart.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -41,7 +41,7 @@
     <input type="range" id="phaseShift" min="0" max="360" value="0" step="1">
   </div>
 
-  <script src="chart.js">
+  <script >
     const ctx1 = document.getElementById('waveChart').getContext('2d');
     const ctx2 = document.getElementById('sumChart').getContext('2d');
     const slider = document.getElementById('phaseShift');
@@ -112,3 +112,4 @@
   </script>
 </body>
 </html>
+

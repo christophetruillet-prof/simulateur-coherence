@@ -1,144 +1,114 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simulateur de cohérence temporelle</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-  body {
-    font-family: sans-serif;
-    background: #f5f5f5;
-    margin: 20px;
-    text-align: center;
-  }
-  h2 {
-    color: #333;
-  }
-  .container {
-    max-width: 800px;
-    margin: auto;
-  }
-  canvas {
-    background: white;
-    margin: 20px 0;
-    width: 100%;
-    height: 300px;
-    border-radius: 8px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  }
-  .controls {
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-  }
-  .slider {
-    width: 80%;
-    margin: 10px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulateur de cohérence temporelle</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    .chart-container {
+      width: 90%;
+      max-width: 700px;
+      margin: 30px auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    input[type="range"] {
+      width: 80%;
+      margin: 15px 0;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h2>🌊 Simulateur de cohérence temporelle</h2>
-    <div class="controls">
-      <label>Différence de phase initiale (°): 
-        <input type="range" id="phaseSlider" min="0" max="360" value="0" class="slider">
-        <span id="phaseValue">0°</span>
-      </label><br>
-      <label>Fréquence (Hz): 
-        <input type="range" id="freqSlider" min="1" max="10" value="2" class="slider">
-        <span id="freqValue">2 Hz</span>
-      </label>
-    </div>
-    <canvas id="waveCanvas"></canvas>
-    <canvas id="sumCanvas"></canvas>
+  <h1>Simulateur de cohérence temporelle</h1>
+
+  <div class="chart-container">
+    <canvas id="waveChart"></canvas>
+    <canvas id="sumChart" style="margin-top:40px;"></canvas>
+
+    <label for="phaseShift">Déphasage initial (en degrés) :</label><br>
+    <input type="range" id="phaseShift" min="0" max="360" value="0" step="1">
   </div>
 
-<script scr="chart.js">
-const waveCtx = document.getElementById('waveCanvas').getContext('2d');
-const sumCtx = document.getElementById('sumCanvas').getContext('2d');
+  <script src="chart.js">
+    const ctx1 = document.getElementById('waveChart').getContext('2d');
+    const ctx2 = document.getElementById('sumChart').getContext('2d');
+    const slider = document.getElementById('phaseShift');
 
-const N = 300;
-const x = Array.from({length: N}, (_, i) => i / 100);
-let phase = 0;
-let freq = 2;
-const amp = 1;
+    const N = 200;
+    const x = Array.from({length: N}, (_, i) => i / 20);
+    const amplitude = 1;
 
-// Échelle fixe pour la somme : ±2
-const yScale = 2.2;
-
-// Création des graphiques
-const waveChart = new Chart(waveCtx, {
-  type: 'line',
-  data: {
-    labels: x,
-    datasets: [
-      { label: 'Onde 1', data: [], borderColor: 'blue', borderWidth: 2, fill: false },
-      { label: 'Onde 2', data: [], borderColor: 'red', borderWidth: 2, fill: false }
-    ]
-  },
-  options: {
-    animation: false,
-    scales: {
-      y: { min: -1.2, max: 1.2 },
-      x: { title: { display: true, text: 'Temps (s)' } }
+    function degToRad(deg) {
+      return deg * Math.PI / 180;
     }
-  }
-});
 
-const sumChart = new Chart(sumCtx, {
-  type: 'line',
-  data: {
-    labels: x,
-    datasets: [{ label: 'Somme des deux ondes', data: [], borderColor: 'green', borderWidth: 2, fill: false }]
-  },
-  options: {
-    animation: false,
-    scales: {
-      y: { min: -yScale, max: yScale },
-      x: { title: { display: true, text: 'Temps (s)' } }
+    function generateData(phaseDeg) {
+      const phaseRad = degToRad(phaseDeg);
+      const wave1 = x.map(t => amplitude * Math.sin(2 * Math.PI * 0.5 * t));
+      const wave2 = x.map(t => amplitude * Math.sin(2 * Math.PI * 0.5 * t + phaseRad));
+      const sum = wave1.map((y, i) => y + wave2[i]);
+      return {wave1, wave2, sum};
     }
-  }
-});
 
-// Animation des ondes
-function updateCharts(t) {
-  const phi = phase * Math.PI / 180;
-  const y1 = x.map(v => amp * Math.sin(2 * Math.PI * freq * v + 2 * Math.PI * freq * t));
-  const y2 = x.map(v => amp * Math.sin(2 * Math.PI * freq * v + phi + 2 * Math.PI * freq * t));
-  const ySum = y1.map((v, i) => v + y2[i]);
+    function updateCharts(phaseDeg) {
+      const {wave1, wave2, sum} = generateData(phaseDeg);
 
-  waveChart.data.datasets[0].data = y1;
-  waveChart.data.datasets[1].data = y2;
-  sumChart.data.datasets[0].data = ySum;
+      waveChart.data.datasets[0].data = wave1;
+      waveChart.data.datasets[1].data = wave2;
+      sumChart.data.datasets[0].data = sum;
 
-  waveChart.update();
-  sumChart.update();
-}
+      waveChart.update();
+      sumChart.update();
+    }
 
-// Sliders
-document.getElementById('phaseSlider').oninput = e => {
-  phase = e.target.value;
-  document.getElementById('phaseValue').innerText = phase + "°";
-};
-document.getElementById('freqSlider').oninput = e => {
-  freq = e.target.value;
-  document.getElementById('freqValue').innerText = freq + " Hz";
-};
+    const waveChart = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: x,
+        datasets: [
+          { label: 'Onde 1', data: [], borderColor: 'red', borderWidth: 2, fill: false },
+          { label: 'Onde 2', data: [], borderColor: 'blue', borderWidth: 2, fill: false }
+        ]
+      },
+      options: {
+        animation: false,
+        scales: {
+          y: { min: -1.2, max: 1.2 }
+        }
+      }
+    });
 
-// Boucle d'animation
-let start = null;
-function animate(timestamp) {
-  if (!start) start = timestamp;
-  const t = (timestamp - start) / 1000;
-  updateCharts(t);
-  requestAnimationFrame(animate);
-}
-animate();
-</script>
+    const sumChart = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: x,
+        datasets: [
+          { label: 'Somme des deux ondes', data: [], borderColor: 'purple', borderWidth: 2, fill: false }
+        ]
+      },
+      options: {
+        animation: false,
+        scales: {
+          y: { min: -2.4, max: 2.4 }
+        }
+      }
+    });
+
+    // Initialisation
+    updateCharts(0);
+    slider.addEventListener('input', e => updateCharts(Number(e.target.value)));
+  </script>
 </body>
 </html>
-

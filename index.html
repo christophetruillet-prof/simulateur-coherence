@@ -110,7 +110,14 @@
 </head>
 <body>
   <h1>Simulateur : cohérence temporelle et interférences</h1>
-
+  <div class="notice" role="region" aria-label="Notice explicative">
+    <h2>À observer</h2>
+    <ul>
+      <li>Les deux graphiques du haut montrent le <strong>champ électrique</strong> des deux ondes au point M.</li>
+      <li>La courbe <strong>Somme</strong> (en bas) est le champ résultant obtenu par superposition des deux ondes.</li>
+      <li>Le panneau de droite affiche l’<strong>intensité</strong> (énergie moyenne) : plus la case est rouge, plus l’intensité est élevée.</li>
+    </ul>
+  </div>
   <div class="layout">
     <div class="panel">
       <div class="panel-title">Évolution du champ électrique en fonction du temps en un point M donné</div>
@@ -130,16 +137,7 @@
     </div>
   </div>
 
-  <div class="notice" role="region" aria-label="Notice explicative">
-    <h2>À observer</h2>
-    <ul>
-      <li>Les deux graphiques du haut montrent le <strong>champ électrique</strong> des deux ondes au point M.</li>
-      <li>La courbe <strong>Somme</strong> (en bas) est le champ résultant obtenu par superposition des deux ondes.</li>
-      <li>Le panneau de droite affiche l’<strong>intensité</strong> (énergie moyenne) : plus la case est rouge, plus l’intensité est élevée.</li>
-      <li>Quand les deux ondes sont en phase, la somme peut atteindre une amplitude double → <em>interférences constructives</em>.</li>
-      <li>Quand les phases se désynchronisent (perte de cohérence), la visibilité des interférences diminue.</li>
-    </ul>
-  </div>
+  
 <script scr = "chartmin.js"></script>
 <script>
 (() => {
@@ -237,4 +235,5 @@
 </script>
 </body>
 </html>
+
 
